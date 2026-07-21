@@ -79,13 +79,6 @@ sudo systemctl restart netbox netbox-rq
 
 ---
 
-## Roadmap
-
-- **V2:** Interfaces, Cables e demais objetos via tenant do objeto relacionado;
-  filtro opcional na API REST; busca no seletor.
-- **V3:** restringir usuários a um único tenant; tenant padrão por usuário;
-  auditoria.
-
 ## Licença
 
 Apache-2.0
