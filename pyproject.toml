@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "netbox-tenant-context"
+version = "0.1.0"
+authors = [
+    { name = "Adrian Fiio", email = "you@example.com" },
+]
+description = "Global tenant context switcher for NetBox: pick a tenant once and filter the whole UI."
+readme = "README.md"
+requires-python = ">=3.12.0"
+license = { text = "Apache-2.0" }
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Natural Language :: English",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
+
+[project.urls]
+Homepage = "https://github.com/adrianfiio/netbox-tenant-context"
+Source = "https://github.com/adrianfiio/netbox-tenant-context"
+Issues = "https://github.com/adrianfiio/netbox-tenant-context/issues"
+
+[tool.setuptools.packages.find]
+include = ["netbox_tenant_context*"]
+
+[tool.setuptools.package-data]
+netbox_tenant_context = ["templates/**/*.html"]
