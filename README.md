@@ -10,12 +10,16 @@ Compatível com **NetBox 4.6.x** (Django 6.0 / Python 3.12+).
 
 ## Como funciona
 
-- Um **seletor** aparece na barra de navegação (via `navbar()`), com a opção
-  *Todos os Tenants* e a lista de tenants cadastrados.
-- A escolha é gravada **na sessão do usuário** (cada usuário tem seu contexto).
-- Um **middleware** injeta `tenant_id=<escolhido>` nas *list views* do NetBox,
-  reaproveitando os FilterSets nativos. Ou seja: nada de reescrever querysets ou
-  managers, o que mantém o plugin estável entre versões.
+- Dois **seletores independentes** aparecem na barra de navegação: **Tenant**
+  e **Site**. Cada um pode ficar em "Todos" ou apontar para um valor
+  específico — e os dois podem estar ativos ao mesmo tempo (combinados com
+  AND).
+- A escolha é gravada **na sessão do usuário** (cada usuário tem seu próprio
+  contexto).
+- Um **middleware** injeta `tenant_id` / `site_id` tanto nas *list views*
+  quanto nas chamadas de API usadas pelos campos de busca/autocomplete dos
+  formulários (ex.: escolher um Device numa terminação de circuito), evitando
+  conectar objetos de tenants ou sites diferentes por engano.
 
 ### Cobertura (V1)
 
