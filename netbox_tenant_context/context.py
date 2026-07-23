@@ -1,9 +1,13 @@
 """
-Helpers to read/write the active tenant stored in the user's session.
+Helpers to read/write the active context (Tenant and/or Site) stored in the
+user's session.
 
 Everything here is intentionally tiny and dependency-free so it can be imported
 from the middleware, the views, and the template extension without circular
 import problems.
+
+Tenant and Site are independent, optional dimensions. Both can be active at
+once (AND'd together), only one, or neither ("Todos").
 """
 
 from django.conf import settings
@@ -15,33 +19,59 @@ def _cfg(key, default=None):
     return settings.PLUGINS_CONFIG.get(PLUGIN_NAME, {}).get(key, default)
 
 
-def get_session_key():
-    return _cfg("session_key", "tenant_context_id")
-
-
-def get_current_tenant_id(request):
-    """
-    Return the tenant id stored in the user's session, or None when the
-    context is "Todos os Tenants" (no filter).
-    """
+def _get_id(request, session_key):
     session = getattr(request, "session", None)
     if session is None:
         return None
-    value = session.get(get_session_key())
+    value = session.get(session_key)
     try:
         return int(value) if value else None
     except (TypeError, ValueError):
         return None
 
 
-def set_current_tenant_id(request, tenant_id):
-    """Persist the chosen tenant (or clear it when tenant_id is falsy)."""
-    key = get_session_key()
-    if tenant_id:
-        request.session[key] = int(tenant_id)
+def _set_id(request, session_key, value):
+    if value:
+        request.session[session_key] = int(value)
     else:
-        request.session.pop(key, None)
+        request.session.pop(session_key, None)
 
+
+# ---------------------------------------------------------------------------
+# Tenant
+# ---------------------------------------------------------------------------
+
+def get_session_key():
+    return _cfg("session_key", "tenant_context_id")
+
+
+def get_current_tenant_id(request):
+    return _get_id(request, get_session_key())
+
+
+def set_current_tenant_id(request, tenant_id):
+    _set_id(request, get_session_key(), tenant_id)
+
+
+# ---------------------------------------------------------------------------
+# Site
+# ---------------------------------------------------------------------------
+
+def get_site_session_key():
+    return _cfg("site_session_key", "site_context_id")
+
+
+def get_current_site_id(request):
+    return _get_id(request, get_site_session_key())
+
+
+def set_current_site_id(request, site_id):
+    _set_id(request, get_site_session_key(), site_id)
+
+
+# ---------------------------------------------------------------------------
+# Bypass
+# ---------------------------------------------------------------------------
 
 def user_bypasses_filter(request):
     """
@@ -50,7 +80,6 @@ def user_bypasses_filter(request):
     """
     user = getattr(request, "user", None)
     if user is None or not user.is_authenticated:
-        # Anonymous requests have no session tenant anyway.
         return True
 
     groups = _cfg("bypass_groups", []) or []
