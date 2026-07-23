@@ -1,27 +1,32 @@
 """
 TenantContextMiddleware
 
-Two jobs:
+Applies TWO independent, optional filter dimensions -- Tenant and Site --
+across NetBox:
 
 1. LIST VIEWS (UI)
-   Injects the session-selected tenant into NetBox object *list* views as a
-   `tenant_id` query parameter, so NetBox's own FilterSets do the filtering.
+   Injects the session-selected tenant_id and/or site_id into NetBox object
+   *list* views as query params, so NetBox's own FilterSets do the filtering.
 
 2. AUTOCOMPLETE / API CALLS FROM FORM DROPDOWNS
-   When a form field (e.g. "Device" on a circuit termination) opens a search
-   dropdown it calls the REST API, e.g.:
-       GET /api/dcim/devices/?q=router&brief=1
-   Without a tenant filter this returns devices from ALL tenants, causing the
-   user to accidentally connect a circuit to the wrong tenant's device.
+   Form fields (e.g. "Device" on a circuit termination) search via the REST
+   API. Without a filter this returns objects from ALL tenants/sites, so a
+   user could accidentally connect a circuit to the wrong tenant's device.
+   We inject the correct filter (tenant_id/site_id or the right related
+   lookup) into these API calls automatically.
 
-   We intercept these API calls and inject tenant_id (or the correct lookup
-   path for models that don't have a direct tenant field) automatically.
+Both dimensions can be active at once (combined with AND), only one, or
+neither ("Todos"). Each respects a manual filter the user already applied.
 """
 
 from django.conf import settings
 
-MANUAL_FILTER_PARAMS = ("tenant_id", "tenant", "tenant_group_id", "tenant_group")
+MANUAL_TENANT_PARAMS = ("tenant_id", "tenant", "tenant_group_id", "tenant_group")
+MANUAL_SITE_PARAMS = ("site_id", "site", "region_id", "region")
 
+# ---------------------------------------------------------------------------
+# TENANT paths
+# ---------------------------------------------------------------------------
 DIRECT_TENANT_API_PATHS = {
     "/api/dcim/devices/",
     "/api/dcim/racks/",
@@ -50,16 +55,42 @@ RELATED_TENANT_API_PATHS = {
     "/api/virtualization/interfaces/": "virtual_machine__tenant_id",
 }
 
+# ---------------------------------------------------------------------------
+# SITE paths
+# ---------------------------------------------------------------------------
+DIRECT_SITE_API_PATHS = {
+    "/api/dcim/devices/",
+    "/api/dcim/racks/",
+    "/api/dcim/locations/",
+    "/api/dcim/power-panels/",
+    "/api/dcim/power-feeds/",
+    "/api/ipam/vlans/",
+    "/api/ipam/prefixes/",
+    "/api/circuits/circuit-terminations/",
+}
+
+RELATED_SITE_API_PATHS = {
+    "/api/dcim/interfaces/": "device__site_id",
+    "/api/dcim/front-ports/": "device__site_id",
+    "/api/dcim/rear-ports/": "device__site_id",
+    "/api/dcim/console-ports/": "device__site_id",
+    "/api/dcim/console-server-ports/": "device__site_id",
+    "/api/dcim/power-ports/": "device__site_id",
+    "/api/dcim/power-outlets/": "device__site_id",
+    "/api/virtualization/interfaces/": "virtual_machine__site_id",
+}
+
 
 class TenantContextMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
-        self._maybe_inject_api_tenant(request)
+        self._maybe_inject_api_filters(request)
         return self.get_response(request)
 
     def process_view(self, request, view_func, view_args, view_kwargs):
+        """Inject tenant_id / site_id into UI list views."""
         view_class = getattr(view_func, "view_class", None)
         if view_class is None:
             return None
@@ -74,58 +105,83 @@ class TenantContextMiddleware:
 
         from netbox_tenant_context.context import (
             get_current_tenant_id,
+            get_current_site_id,
             user_bypasses_filter,
         )
 
         if user_bypasses_filter(request):
-            return None
-
-        tenant_id = get_current_tenant_id(request)
-        if not tenant_id:
             return None
 
         respect_manual = (
             settings.PLUGINS_CONFIG.get("netbox_tenant_context", {})
             .get("respect_manual_filter", True)
         )
-        if respect_manual and any(p in request.GET for p in MANUAL_FILTER_PARAMS):
-            return None
 
         params = request.GET.copy()
-        params["tenant_id"] = str(tenant_id)
-        request.GET = params
+        changed = False
+
+        tenant_id = get_current_tenant_id(request)
+        if tenant_id and not (respect_manual and any(p in request.GET for p in MANUAL_TENANT_PARAMS)):
+            params["tenant_id"] = str(tenant_id)
+            changed = True
+
+        site_id = get_current_site_id(request)
+        if site_id and not (respect_manual and any(p in request.GET for p in MANUAL_SITE_PARAMS)):
+            params["site_id"] = str(site_id)
+            changed = True
+
+        if changed:
+            request.GET = params
         return None
 
-    def _maybe_inject_api_tenant(self, request):
+    # ------------------------------------------------------------------
+    # API autocomplete injection
+    # ------------------------------------------------------------------
+
+    def _maybe_inject_api_filters(self, request):
         if request.method != "GET":
             return
 
         path = request.path_info
 
-        filter_param = None
+        tenant_param = None
         if path in DIRECT_TENANT_API_PATHS:
-            filter_param = "tenant_id"
+            tenant_param = "tenant_id"
         elif path in RELATED_TENANT_API_PATHS:
-            filter_param = RELATED_TENANT_API_PATHS[path]
+            tenant_param = RELATED_TENANT_API_PATHS[path]
 
-        if filter_param is None:
-            return
+        site_param = None
+        if path in DIRECT_SITE_API_PATHS:
+            site_param = "site_id"
+        elif path in RELATED_SITE_API_PATHS:
+            site_param = RELATED_SITE_API_PATHS[path]
 
-        if any(p in request.GET for p in MANUAL_FILTER_PARAMS):
+        if tenant_param is None and site_param is None:
             return
 
         from netbox_tenant_context.context import (
             get_current_tenant_id,
+            get_current_site_id,
             user_bypasses_filter,
         )
 
         if user_bypasses_filter(request):
             return
 
-        tenant_id = get_current_tenant_id(request)
-        if not tenant_id:
-            return
-
         params = request.GET.copy()
-        params[filter_param] = str(tenant_id)
-        request.GET = params
+        changed = False
+
+        if tenant_param and not any(p in request.GET for p in MANUAL_TENANT_PARAMS):
+            tenant_id = get_current_tenant_id(request)
+            if tenant_id:
+                params[tenant_param] = str(tenant_id)
+                changed = True
+
+        if site_param and not any(p in request.GET for p in MANUAL_SITE_PARAMS):
+            site_id = get_current_site_id(request)
+            if site_id:
+                params[site_param] = str(site_id)
+                changed = True
+
+        if changed:
+            request.GET = params
