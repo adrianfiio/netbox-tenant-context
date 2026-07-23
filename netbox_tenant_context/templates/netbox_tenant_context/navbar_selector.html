@@ -1,14 +1,14 @@
 {% comment %}
-Global tenant selector shown in the NetBox top navbar.
-Submitting any button POSTs to the set_context endpoint, which stores the
-choice in the session and redirects back to the current page (via `next`).
+Global Tenant + Site selectors shown in the NetBox top navbar.
+Each is an independent dropdown/form; both can be active at once.
 {% endcomment %}
+
 <div class="nav-item dropdown">
   <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown"
      role="button" aria-expanded="false" title="Contexto de Tenant">
     <i class="mdi mdi-domain"></i>
     <span class="d-none d-lg-inline ms-1">
-      {% if current %}{{ current.name }}{% else %}Todos os Tenants{% endif %}
+      {% if current_tenant %}{{ current_tenant.name }}{% else %}Todos os Tenants{% endif %}
     </span>
   </a>
   <div class="dropdown-menu dropdown-menu-end"
@@ -17,23 +17,51 @@ choice in the session and redirects back to the current page (via `next`).
           action="{% url 'plugins:netbox_tenant_context:set_context' %}">
       {% csrf_token %}
       <input type="hidden" name="next" value="{{ request.get_full_path }}">
-
-      <h6 class="dropdown-header">Contexto ativo</h6>
-
+      <h6 class="dropdown-header">Tenant</h6>
       <button type="submit" name="tenant" value="all"
-              class="dropdown-item{% if not current_id %} active{% endif %}">
+              class="dropdown-item{% if not current_tenant_id %} active{% endif %}">
         <i class="mdi mdi-earth me-1"></i> Todos os Tenants
       </button>
-
       <div class="dropdown-divider"></div>
-
       {% for tenant in tenants %}
         <button type="submit" name="tenant" value="{{ tenant.pk }}"
-                class="dropdown-item{% if tenant.pk == current_id %} active{% endif %}">
+                class="dropdown-item{% if tenant.pk == current_tenant_id %} active{% endif %}">
           {{ tenant.name }}
         </button>
       {% empty %}
         <span class="dropdown-item-text text-muted">Nenhum tenant cadastrado</span>
+      {% endfor %}
+    </form>
+  </div>
+</div>
+
+<div class="nav-item dropdown">
+  <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown"
+     role="button" aria-expanded="false" title="Contexto de Site">
+    <i class="mdi mdi-map-marker"></i>
+    <span class="d-none d-lg-inline ms-1">
+      {% if current_site %}{{ current_site.name }}{% else %}Todos os Sites{% endif %}
+    </span>
+  </a>
+  <div class="dropdown-menu dropdown-menu-end"
+       style="max-height: 420px; overflow-y: auto; min-width: 220px;">
+    <form method="post"
+          action="{% url 'plugins:netbox_tenant_context:set_site_context' %}">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+      <h6 class="dropdown-header">Site</h6>
+      <button type="submit" name="site" value="all"
+              class="dropdown-item{% if not current_site_id %} active{% endif %}">
+        <i class="mdi mdi-earth me-1"></i> Todos os Sites
+      </button>
+      <div class="dropdown-divider"></div>
+      {% for site in sites %}
+        <button type="submit" name="site" value="{{ site.pk }}"
+                class="dropdown-item{% if site.pk == current_site_id %} active{% endif %}">
+          {{ site.name }}
+        </button>
+      {% empty %}
+        <span class="dropdown-item-text text-muted">Nenhum site cadastrado</span>
       {% endfor %}
     </form>
   </div>
